@@ -1,56 +1,87 @@
 # Wireless AI Experiment Suite
 
-[English](README.en.md)
+[中文](README.md) | [English](README.en.md)
 
-面向学习和数值验证的无线 AI 实验工具集：整理本地开发的合成信道、CSI 重建、单用户波束预测、量化反馈对照及验证代码。贡献主要是实验接口、模型集成、手写梯度、数值约定与测试；不声称提出这些基础模型，也不声称精确复现某篇论文或达到论文报告的性能。
+本项目研究合成多径信道上的 CSI 重构、有限量化反馈和单用户波束预测，提供可切换的神经网络基线、固定稀疏反馈对照，以及统一的训练划分和评估接口。
 
-目前作为私有候选仓库上传；公开发布需要另行确认。仓库只保留代码、合成测试和介绍，不包含真实数据、模型权重、内部报告或个人资料。
+## 研究问题
 
-## 内容
+研究分为三个相互关联的实验方向：
 
-| 模块 | 内容 |
+1. **CSI 表示与重构**：在相同输入布局与潜变量维度下，卷积、循环与注意力编码器如何影响重构误差和空间方向保持？
+2. **有限反馈重构**：在相同标称反馈预算下，4-bit 量化自编码器与训练集拟合的固定稀疏反馈，分别表现出怎样的重构误差？
+3. **单用户波束预测**：不同网络能否学习从复信道到 MRT 波束的映射，并保留较高的归一化波束增益？
+
+这些方向目前通过独立实验实现。波束模型使用真实合成信道的一个子带作为输入；重构后的 CSI 尚未串接为波束模型的输入。
+
+## 方法概览
+
+```text
+相关多径 MISO 信道 → 独立训练 / 验证 / 测试样本
+                    ├─ 连续潜变量编码 → CSI 重构 → NMSE / SGCS
+                    ├─ 4-bit 潜变量量化 → CSI 重构 → 反馈预算 / NMSE
+                    ├─ 固定位置稀疏反馈 → CSI 重构 → 反馈预算 / NMSE
+                    └─ 单子带信道 → 波束预测 → 归一化波束增益
+```
+
+信道生成器包含指数空间相关、多径时延与功率分布、可选 Rician 分量和阴影衰落。CSI 编码器覆盖 CNN、残差 CNN、LSTM、GRU、RNN、TCN 和 Transformer；波束预测覆盖 MLP、残差 MLP 及相应序列模型。NumPy 实现提供手动反向传播与 Adam，供梯度检查和实现对照。
+
+量化重构采用 16 级实值潜变量，训练时使用直通梯度；稀疏对照仅在训练集估计均值、固定系数位置和量化尺度。基础架构与算法来源逐项列在 [REFERENCES.md](REFERENCES.md)。项目工作集中于无线任务建模、实验接口与模型集成，不将基础网络架构作为新方法提出。
+
+## 实验设计
+
+| 实验 | 输入与表示 | 控制变量 | 测试指标 |
+| --- | --- | --- | --- |
+| 连续 CSI 重构 | 12 子带 × 32 天线，实虚双通道 | 输入布局、潜变量维度、数据种子、训练预算 | NMSE、复数 SGCS |
+| 量化 / 稀疏反馈 | 32 子带 × 32 天线 | 数据种子、相同标称反馈预算、训练集拟合 | 反馈 bit 数、NMSE、复数 SGCS |
+| 波束预测 | 第一个子带的 32 天线信道 | 输入样本、训练预算、MRT 监督目标 | 归一化波束增益 |
+
+训练、验证与测试样本来自独立随机流。神经模型在训练集更新参数，以验证集 MSE 选择 epoch，恢复对应参数后计算测试指标。稀疏对照只在训练集拟合；评估代码也提供配对 bootstrap，用于对相同测试样本上的方法进行统计比较。
+
+连续潜变量维度不是反馈 bit 数。量化模型每个实值潜变量计 4 bit，稀疏对照每个复系数计 8 bit，并假设固定均值、位置和尺度已离线共享。两组 CSI 实验的输入尺寸不同，不能直接跨组比较指标。完整数值定义、预算假设和数据布局见 [实验协议](docs/EXPERIMENT_PROTOCOL.md)。
+
+## 代码结构
+
+| 路径 | 内容 |
 | --- | --- |
-| `wireless_ai/channel.py` | 相关多径 MISO 合成频域信道，可选 Rician 分量与阴影衰落 |
-| `wireless_ai/csi_models.py` | CNN、残差 CNN、LSTM、GRU、RNN、TCN、Transformer 连续潜变量重建 |
-| `wireless_ai/beam_models.py` | MLP、残差 MLP、LSTM、GRU、RNN、TCN、Transformer 单用户波束预测 |
-| `wireless_ai/numpy_csi.py`, `numpy_beam.py` | NumPy 手动反向传播、Adam 与前向推理 |
-| `wireless_ai/quantized_csi.py` | 训练和评估均使用 16 级量化的 CNN 自编码器 |
-| `wireless_ai/sparse_feedback.py` | 训练集拟合的固定位置、实虚部各 4 bit 的稀疏反馈对照 |
-| `wireless_ai/validation/` | NMSE、复数 SGCS、归一化波束增益、反馈预算、配对 bootstrap 和 MAT 元数据检查 |
+| `wireless_ai/channel.py` | 相关多径信道生成 |
+| `wireless_ai/csi_models.py` | CSI 编码 / 解码与架构选择 |
+| `wireless_ai/beam_models.py` | 单用户波束预测与架构选择 |
+| `wireless_ai/quantized_csi.py` | 4-bit 量化 CNN 自编码器 |
+| `wireless_ai/sparse_feedback.py` | 固定稀疏反馈与重构 |
+| `wireless_ai/numpy_csi.py`, `numpy_beam.py` | 手写梯度、Adam 与参数保存 / 加载 |
+| `wireless_ai/workflow.py` | 合成实验、验证集选模与测试评估入口 |
+| `wireless_ai/validation/` | 指标、bootstrap、HT 布局转换和 MAT 元数据检查 |
+| `tests/` | 模型前反向、梯度、量化预算与数值约定测试 |
 
-## 运行
+## 安装与运行
 
-使用 Python 3.9。依赖见 [requirements.txt](requirements.txt)，不需要下载数据。基础 NumPy 示例：
+使用 Python 3.9，在仓库目录运行：
 
 ```powershell
 py -3.9 -m pip install -r requirements.txt
 py -3.9 -B -X utf8 -m unittest discover -s tests -v
-py -3.9 -B -X utf8 -m wireless_ai --task csi-numpy
-py -3.9 -B -X utf8 -m wireless_ai --task beam-numpy
+```
+
+先以默认的小规模 CPU 实验检查运行环境：
+
+```powershell
 py -3.9 -B -X utf8 -m wireless_ai --task csi --arch gru --latent-dim 16
 py -3.9 -B -X utf8 -m wireless_ai --task beam --arch mlp
 py -3.9 -B -X utf8 -m wireless_ai --task quantized --feedback-bits 128
 py -3.9 -B -X utf8 -m wireless_ai --task sparse --feedback-bits 128
 ```
 
-CLI 是小规模 CPU 示例，默认 32/8/8 条训练/验证/测试样本和 2 个 epoch，仅用于检查流程。三份数据来自独立的随机流；神经模型按验证集 MSE 选择 epoch，最后报告测试集指标。CSI 与波束是两个独立任务：波束输入为真实合成信道的第一个子带，没有串接压缩重建后的反馈链路。
+NumPy 对照入口为 `--task csi-numpy` 和 `--task beam-numpy`。通过 `--train-samples`、`--val-samples`、`--test-samples`、`--epochs` 和 `--seed` 配置实验；`--epochs` 仅影响神经模型。`--out` 可将指标保存到一个新 JSON 文件，已有文件不会覆盖。运行结果和权重不随仓库分发。
 
-`--out` 可保存到仓库之外的新 JSON 文件；已有文件不会覆盖。默认不保存权重。模型类可以直接前向推理；NumPy 类提供 NPZ 参数保存/加载，仅加载可信、符合接口的文件。
+## 当前研究状态
 
-## 数值约定与限制
+已实现上述模型和实验接口，35 项合成测试覆盖模型前反向、NumPy 梯度、量化与反馈预算、指标定义和输出安全；6 个任务入口已完成小规模 CPU 检查。这些检查验证实现行为，当前未提供模型收敛、跨场景泛化或方法优越性的正式比较结果。
 
-- 信道为简化教学仿真，未按 3GPP 或 QuaDRiGa 校准。默认 `[sample,12,32]`，量化和稀疏示例使用 `[sample,32,32]`；后者在 CLI 中仍是频域子带/天线布局，不是 COST2100 的角度时延域数据。
-- Rician K 指阴影衰落前的 LoS / 散射期望功率比。两者均按每根天线单位期望功率归一化。
-- `latent_dim` 是连续浮点潜变量数，不能称为反馈 bit 数。量化模型按 `feedback_bits/4` 个 16 级实值潜变量计预算；稀疏模型每个复数系数计 8 bit。两者没有打包传输码流、协议头或熵编码。
-- 稀疏对照的均值、位置和量化尺度仅由训练集拟合并离线共享，不计入每样本负载；跨场景更新这些信息的成本需另算。它不是 3GPP Type-II 实现。
-- 信号约定 `y=hᴴwx+n`，MRT 为 `w=h/||h||`。归一化波束增益测量方向对齐，不代表吞吐量或多用户优化。
-- NMSE 按样本误差功率/真实功率计算，再取 `10log10(mean(linear NMSE))`。复数 SGCS 为每根向量的平方复数余弦，最后按样本平均；调用者必须先明确域和天线轴。
-- bootstrap 假设样本对可独立重采样；轨迹或时间相关数据需要分组/区块方法。零功率向量不能评分。
-- CsiNet 风格 `HT` 转换工具仅支持 `[sample,2048]` 的实部/虚部布局并减去 0.5，输出 `[sample,angle,delay]`。不能直接当作频域 SGCS 输入。MAT 检查默认只输出文件名，但文件名和变量名也可能包含信息，分享前须复查。
-- 合成测试不证明实际无线性能、GPU 逐位可复现或原论文复现成功。
+当前信道为未校准的简化统计模型。实验范围是合成频域 CSI 与单用户波束对齐，不含真实射频采集、硬件部署或完整协议链路。进一步性能结论需要更充分的训练、多个随机种子与独立场景评估。
 
-## 来源和许可
+## 引用与许可
 
-各模型的概念来源及作者代码链接见 [REFERENCES.md](REFERENCES.md)，来源边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。这些网络是本地教学实现/集成，引用基础架构不等于声明复现其原始任务。
+CSI 反馈任务参考 [CsiNet 论文](https://ieeexplore.ieee.org/document/8322184/)及[作者代码](https://github.com/sydney222/Python_CsiNet)；MRT、网络架构、量化与统计方法的完整引用见 [REFERENCES.md](REFERENCES.md)。各模型为本地任务实现与适配，使用相关方法时请引用对应原工作。
 
-不打包第三方完整模型仓库、数据集或预训练权重，也不自动下载。若使用公开数据，请从对应作者页面取得并核实使用条件；非公开数据不进入本仓库。引用和“仅供学习”说明不能替代许可。目前没有为全部代码授予统一开源许可证，公开前仍需确认权利范围。
+本仓库尚未指定统一源码许可证；第三方依赖遵循各自许可，引用不构成第三方代码的再分发授权。来源与依赖说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
