@@ -84,4 +84,4 @@ NumPy 对照入口为 `--task csi-numpy` 和 `--task beam-numpy`。通过 `--tra
 
 CSI 反馈任务参考 [CsiNet 论文](https://ieeexplore.ieee.org/document/8322184/)及[作者代码](https://github.com/sydney222/Python_CsiNet)；MRT、网络架构、量化与统计方法的完整引用见 [REFERENCES.md](REFERENCES.md)。各模型为本地任务实现与适配，使用相关方法时请引用对应原工作。
 
-本仓库尚未指定统一源码许可证；第三方依赖遵循各自许可，引用不构成第三方代码的再分发授权。来源与依赖说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本仓库代码与原创项目说明采用 [MIT License](LICENSE)，允许使用、修改和再分发（包括商业用途），须保留版权及许可声明。第三方依赖、引用论文、外部数据和模型权重遵循各自条款，不属于本仓库 MIT 授权范围。来源与依赖说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

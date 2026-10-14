@@ -21,4 +21,4 @@ Dependencies are installed separately. Their own distributions retain the applic
 
 ## Source-code licensing
 
-No unified source-code license is specified. Third-party code, data and weights remain subject to their respective terms. Citation and research or educational use do not replace permission to redistribute protected material. Retain any applicable copyright and license notices with the affected material.
+The repository's code and original project documentation are licensed under the [MIT License](LICENSE). This grant does not extend to third-party software, cited papers, external datasets or model weights, which remain subject to their respective terms. Citation and research or educational use do not replace permission to redistribute protected material. Retain any applicable copyright and license notices with the affected material.
